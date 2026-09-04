@@ -1,0 +1,6 @@
+{
+  "name": "Fireball 3D",
+  "description": "An action-packed 3D fireball shooting game set in an open-air sun temple with brilliant sunlight, physical pillar obstacles, tactical radar, and explosive elemental magic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
