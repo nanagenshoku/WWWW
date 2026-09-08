@@ -132,8 +132,12 @@ export class FireballEngine {
   private shockwaves: Shockwave[] = [];
   private torches: { light: THREE.PointLight; baseIntensity: number }[] = [];
   private staffGroup: THREE.Group | null = null;
+  private orbLevitationGroup: THREE.Group | null = null;
   private staffGem: THREE.Mesh | null = null;
   private staffLight: THREE.PointLight | null = null;
+  private staffGoldRingGroup: THREE.Group | null = null;
+  private staffOuterRing: THREE.Mesh | null = null;
+  private staffInnerRing: THREE.Mesh | null = null;
   private runeCircle: THREE.Mesh | null = null;
 
   // Grimoire Book in Left Hand & Radar Canvas
@@ -250,8 +254,8 @@ export class FireballEngine {
     // 6. Setup Listeners
     this.setupEventListeners();
 
-    // 7. Start on Floor 1 of Expedition (Sanctuary only appears after 10 floors cleared!)
-    this.loadDungeonFloor(1);
+    // 7. Start on Floor 0 (Sanctuary of Embers)
+    this.loadHub(1);
 
     // 8. Start Loop
     this.animate = this.animate.bind(this);
@@ -512,31 +516,54 @@ export class FireballEngine {
     // Spellcaster Staff / Hand in front of camera
     this.staffGroup = new THREE.Group();
 
-    // Staff wooden pole
-    const poleGeo = new THREE.CylinderGeometry(0.04, 0.05, 1.6, 12);
+    // Staff wooden pole (ends cleanly down so the orb levitates with a clear air gap)
+    const poleGeo = new THREE.CylinderGeometry(0.034, 0.044, 1.2, 14);
     const poleMat = new THREE.MeshStandardMaterial({
       color: 0x3d2314,
       roughness: 0.7,
       metalness: 0.1,
     });
     const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(0, -0.4, 0);
+    pole.position.set(0, -0.52, 0);
     this.staffGroup.add(pole);
 
-    // Gold ornate head bracket
-    const bracketGeo = new THREE.TorusGeometry(0.12, 0.03, 8, 16);
+    // Gold ornate head collar on top of the wooden pole
     const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
-      roughness: 0.3,
-      metalness: 0.85,
+      color: 0xffd700,
+      emissive: 0x332200,
+      roughness: 0.25,
+      metalness: 0.9,
     });
-    const bracket = new THREE.Mesh(bracketGeo, goldMat);
-    bracket.position.set(0, 0.35, 0);
-    bracket.rotation.x = Math.PI / 2;
-    this.staffGroup.add(bracket);
 
-    // Floating Fire Core Gem / Crystal
-    const gemGeo = new THREE.IcosahedronGeometry(0.14, 1);
+    const collarGeo = new THREE.CylinderGeometry(0.052, 0.036, 0.08, 16);
+    const collar = new THREE.Mesh(collarGeo, goldMat);
+    collar.position.set(0, 0.11, 0);
+    this.staffGroup.add(collar);
+
+    // Ornate gold cradle rim / socket at the very top of the handle (terminates at y = 0.168)
+    const socketGeo = new THREE.TorusGeometry(0.054, 0.013, 12, 24);
+    const socket = new THREE.Mesh(socketGeo, goldMat);
+    socket.position.set(0, 0.155, 0);
+    socket.rotation.x = Math.PI / 2;
+    this.staffGroup.add(socket);
+
+    // Dark metallic focus plate inside socket
+    const emitterGeo = new THREE.CylinderGeometry(0.044, 0.044, 0.02, 16);
+    const emitterMat = new THREE.MeshStandardMaterial({
+      color: 0x221508,
+      roughness: 0.4,
+      metalness: 0.8,
+    });
+    const emitter = new THREE.Mesh(emitterGeo, emitterMat);
+    emitter.position.set(0, 0.15, 0);
+    this.staffGroup.add(emitter);
+
+    // Levitating Orb System Group (floats in mid-air at y = 0.36, cleanly above handle without touching)
+    this.orbLevitationGroup = new THREE.Group();
+    this.orbLevitationGroup.position.set(0, 0.36, 0);
+
+    // Floating Fire Core Ball / Crystal (centered at (0, 0, 0) inside levitation group)
+    const gemGeo = new THREE.IcosahedronGeometry(0.12, 2);
     const gemMat = new THREE.MeshStandardMaterial({
       color: 0xff6600,
       emissive: 0xff5500,
@@ -545,13 +572,48 @@ export class FireballEngine {
       metalness: 0.3,
     });
     this.staffGem = new THREE.Mesh(gemGeo, gemMat);
-    this.staffGem.position.set(0, 0.4, 0);
-    this.staffGroup.add(this.staffGem);
+    this.staffGem.position.set(0, 0, 0);
+    this.orbLevitationGroup.add(this.staffGem);
 
-    // Light emitting from gem
-    this.staffLight = new THREE.PointLight(0xff6600, 1.2, 5);
-    this.staffLight.position.set(0, 0.4, 0);
-    this.staffGroup.add(this.staffLight);
+    // Light emitting from the levitating ball
+    this.staffLight = new THREE.PointLight(0xff6600, 1.3, 5.5);
+    this.staffLight.position.set(0, 0, 0);
+    this.orbLevitationGroup.add(this.staffLight);
+
+    // Golden Rings spinning and rotating around the levitating ball
+    this.staffGoldRingGroup = new THREE.Group();
+    this.staffGoldRingGroup.position.set(0, 0, 0);
+
+    // Outer Golden Ring with ornate studs
+    const outerRingGeo = new THREE.TorusGeometry(0.175, 0.015, 16, 48);
+    this.staffOuterRing = new THREE.Mesh(outerRingGeo, goldMat);
+    this.staffOuterRing.castShadow = true;
+
+    // 4 Ornate Golden Spherical Nodes on outer ring
+    const nodeGeo = new THREE.SphereGeometry(0.022, 8, 8);
+    const nodeMat = new THREE.MeshStandardMaterial({
+      color: 0xffea77,
+      emissive: 0x553800,
+      roughness: 0.18,
+      metalness: 0.95,
+    });
+    for (let j = 0; j < 4; j++) {
+      const nodeAngle = (j * Math.PI) / 2;
+      const node = new THREE.Mesh(nodeGeo, nodeMat);
+      node.position.set(Math.cos(nodeAngle) * 0.175, Math.sin(nodeAngle) * 0.175, 0);
+      this.staffOuterRing.add(node);
+    }
+    this.staffGoldRingGroup.add(this.staffOuterRing);
+
+    // Inner Golden Ring (nested astrolabe gyroscopic ring)
+    const innerRingGeo = new THREE.TorusGeometry(0.145, 0.012, 16, 40);
+    this.staffInnerRing = new THREE.Mesh(innerRingGeo, goldMat);
+    this.staffInnerRing.rotation.x = Math.PI / 3;
+    this.staffInnerRing.rotation.y = Math.PI / 4;
+    this.staffGoldRingGroup.add(this.staffInnerRing);
+
+    this.orbLevitationGroup.add(this.staffGoldRingGroup);
+    this.staffGroup.add(this.orbLevitationGroup);
 
     // Position staff on right side of view
     this.staffGroup.position.set(0.38, -0.32, -0.7);
@@ -562,175 +624,119 @@ export class FireballEngine {
 
   private buildGrimoire() {
     this.radarCanvas = document.createElement('canvas');
-    this.radarCanvas.width = 512;
-    this.radarCanvas.height = 512;
+    this.radarCanvas.width = 1024;
+    this.radarCanvas.height = 640;
     this.radarCtx = this.radarCanvas.getContext('2d');
     this.radarTexture = new THREE.CanvasTexture(this.radarCanvas);
-    this.radarTexture.anisotropy = 4;
+    this.radarTexture.generateMipmaps = false;
+    this.radarTexture.minFilter = THREE.LinearFilter;
+    this.radarTexture.magFilter = THREE.LinearFilter;
+    this.radarTexture.anisotropy = 16;
 
     this.bookGroup = new THREE.Group();
 
-    // 1. Robed Left Arm & Gauntleted Hand holding the book
-    const armGroup = new THREE.Group();
-    const sleeveGeo = new THREE.CylinderGeometry(0.065, 0.088, 0.45, 12);
-    const sleeveMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.85,
-      metalness: 0.1,
-    });
-    const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
-    sleeve.position.set(-0.06, -0.22, 0.18);
-    sleeve.rotation.set(-0.65, 0.25, 0.25);
-    armGroup.add(sleeve);
+    // 1. Open Ancient Grimoire (Cover + Spine + Pages)
+    const bookMeshGroup = new THREE.Group();
 
-    // Gold embroidered cuff band on sleeve
-    const cuffGeo = new THREE.TorusGeometry(0.078, 0.014, 8, 16);
+    // Rich dark brown leather cover (contrasting with world, strictly dark brown, not black)
+    const leatherMat = new THREE.MeshStandardMaterial({
+      color: 0x3e2014,
+      roughness: 0.65,
+      metalness: 0.18,
+    });
+
     const goldMat = new THREE.MeshStandardMaterial({
       color: 0xd4af37,
       roughness: 0.35,
       metalness: 0.85,
     });
-    const cuff = new THREE.Mesh(cuffGeo, goldMat);
-    cuff.position.set(-0.035, -0.10, 0.09);
-    cuff.rotation.set(-0.65, 0.25, 0.25);
-    armGroup.add(cuff);
 
-    // Gauntleted Hand holding under the spine of the book
-    const handGeo = new THREE.BoxGeometry(0.10, 0.05, 0.14);
-    const handMat = new THREE.MeshStandardMaterial({
-      color: 0x334155,
-      roughness: 0.6,
-      metalness: 0.5,
-    });
-    const hand = new THREE.Mesh(handGeo, handMat);
-    hand.position.set(0, -0.04, 0.02);
-    armGroup.add(hand);
-
-    // Armored fingers curled up along the bottom edge of the book
-    const fingerMat = new THREE.MeshStandardMaterial({
-      color: 0x475569,
-      roughness: 0.5,
-      metalness: 0.6,
-    });
-    for (let f = 0; f < 4; f++) {
-      const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.055, 8), fingerMat);
-      finger.position.set(-0.045 + f * 0.028, -0.015, -0.075);
-      finger.rotation.x = Math.PI / 3;
-      armGroup.add(finger);
-    }
-    // Thumb resting on the left margin
-    const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.055, 8), fingerMat);
-    thumb.position.set(-0.16, 0.025, 0.085);
-    thumb.rotation.set(0.2, 0, -Math.PI / 3);
-    armGroup.add(thumb);
-
-    this.bookGroup.add(armGroup);
-
-    // 2. Open Ancient Grimoire (Cover + Spine + Pages)
-    const bookMeshGroup = new THREE.Group();
-
-    // Dark oxblood leather cover
-    const leatherMat = new THREE.MeshStandardMaterial({
-      color: 0x221310,
-      roughness: 0.68,
-      metalness: 0.18,
-    });
-
-    // Book Spine
-    const spineGeo = new THREE.BoxGeometry(0.045, 0.045, 0.38);
-    const spine = new THREE.Mesh(spineGeo, leatherMat);
-    spine.position.set(0, -0.015, 0);
-    bookMeshGroup.add(spine);
-
-    // Gold spine bands
-    for (let b = -0.14; b <= 0.14; b += 0.07) {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.012), goldMat);
-      band.position.set(0, -0.015, b);
-      bookMeshGroup.add(band);
-    }
-
-    // Left & Right Book Covers (opened wide ~165 degrees)
-    const coverGeo = new THREE.BoxGeometry(0.25, 0.014, 0.38);
-
-    const leftCover = new THREE.Mesh(coverGeo, leatherMat);
-    leftCover.position.set(-0.13, -0.005, 0);
-    leftCover.rotation.z = -0.12;
-    bookMeshGroup.add(leftCover);
-
-    const rightCover = new THREE.Mesh(coverGeo, leatherMat);
-    rightCover.position.set(0.13, -0.005, 0);
-    rightCover.rotation.z = 0.12;
-    bookMeshGroup.add(rightCover);
+    // Leather cover backplate
+    const coverGeo = new THREE.BoxGeometry(0.52, 0.016, 0.34);
+    const coverMesh = new THREE.Mesh(coverGeo, leatherMat);
+    coverMesh.position.set(0, -0.002, 0);
+    bookMeshGroup.add(coverMesh);
 
     // Gold ornate corner brackets on outer corners
     const cornerGeo = new THREE.BoxGeometry(0.035, 0.02, 0.035);
     const corners = [
-      [-0.24, -0.002, -0.175, -0.12],
-      [-0.24, -0.002, 0.175, -0.12],
-      [0.24, -0.002, -0.175, 0.12],
-      [0.24, -0.002, 0.175, 0.12],
+      [-0.24, 0.002, -0.155],
+      [-0.24, 0.002, 0.155],
+      [0.24, 0.002, -0.155],
+      [0.24, 0.002, 0.155],
     ];
-    corners.forEach(([cx, cy, cz, rotZ]) => {
+    corners.forEach(([cx, cy, cz]) => {
       const corner = new THREE.Mesh(cornerGeo, goldMat);
       corner.position.set(cx, cy, cz);
-      corner.rotation.z = rotZ;
       bookMeshGroup.add(corner);
     });
 
-    // 3. Thick Parchment Pages Stack
-    const parchmentMat = new THREE.MeshStandardMaterial({
-      color: 0xeee4cc,
-      roughness: 0.9,
-      metalness: 0.05,
+    // Book Spine
+    const spineGeo = new THREE.BoxGeometry(0.035, 0.025, 0.34);
+    const spine = new THREE.Mesh(spineGeo, leatherMat);
+    spine.position.set(0, -0.005, 0);
+    bookMeshGroup.add(spine);
+
+    // Pale Yellow Pages Stack (unmistakable pale yellow)
+    const pageBlockMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      roughness: 0.85,
+      metalness: 0.02,
     });
-    const pageBlockGeo = new THREE.BoxGeometry(0.24, 0.022, 0.36);
+    const pageBlockGeo = new THREE.BoxGeometry(0.495, 0.018, 0.315);
+    const pagesBlock = new THREE.Mesh(pageBlockGeo, pageBlockMat);
+    pagesBlock.position.set(0, 0.009, 0);
+    bookMeshGroup.add(pagesBlock);
 
-    const leftPages = new THREE.Mesh(pageBlockGeo, parchmentMat);
-    leftPages.position.set(-0.125, 0.008, 0);
-    leftPages.rotation.z = -0.12;
-    bookMeshGroup.add(leftPages);
-
-    const rightPages = new THREE.Mesh(pageBlockGeo, parchmentMat);
-    rightPages.position.set(0.125, 0.008, 0);
-    rightPages.rotation.z = 0.12;
-    bookMeshGroup.add(rightPages);
-
-    // 4. Live Radar Display Surface Mesh
-    // Positioned flat on top of the open pages, facing directly towards camera
-    const radarPlaneGeo = new THREE.PlaneGeometry(0.48, 0.34);
+    // 2. Live Manuscript Display Surface Mesh
+    // Ratio 0.48 : 0.30 = 1.6 : 1, matching 1024 x 640 texture exactly
+    const radarPlaneGeo = new THREE.PlaneGeometry(0.48, 0.30);
     const radarPlaneMat = new THREE.MeshBasicMaterial({
       map: this.radarTexture,
       transparent: false,
     });
     const radarMesh = new THREE.Mesh(radarPlaneGeo, radarPlaneMat);
-    radarMesh.position.set(0, 0.024, 0);
+    radarMesh.position.set(0, 0.020, 0);
     radarMesh.rotation.x = -Math.PI / 2;
     bookMeshGroup.add(radarMesh);
 
-    // 5. Arcane Floating Crystal & Gentle Reading Light
-    const runeStoneGeo = new THREE.OctahedronGeometry(0.028, 0);
-    const runeStoneMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0284c7,
-      emissiveIntensity: 1.6,
-      roughness: 0.2,
-      metalness: 0.8,
-    });
-    const runeStone = new THREE.Mesh(runeStoneGeo, runeStoneMat);
-    runeStone.position.set(0, 0.11, -0.14);
-    bookMeshGroup.add(runeStone);
-
-    this.bookLight = new THREE.PointLight(0x38bdf8, 1.2, 3.2);
-    this.bookLight.position.set(0, 0.13, 0);
+    // 3. Clear Neutral-White Reading Light for the pages (clean contrast without yellow/brown tinting)
+    this.bookLight = new THREE.PointLight(0xffffff, 1.2, 2.6);
+    this.bookLight.position.set(0, 0.18, 0.04);
     bookMeshGroup.add(this.bookLight);
+
+    // Scale and angle optimized for direct readability without obscuring screen crosshair or clipping off-screen
+    bookMeshGroup.scale.set(0.70, 0.70, 0.70);
 
     this.bookGroup.add(bookMeshGroup);
 
-    // Position book in left side of first-person view, angled comfortably towards player
-    this.bookGroup.position.set(-0.36, -0.28, -0.62);
-    this.bookGroup.rotation.set(0.52, 0.36, -0.16);
+    // Initial positioning in lower-left corner
+    this.updateBookPosition(0, 0);
 
     this.camera.add(this.bookGroup);
+  }
+
+  /**
+   * Dynamically repositions the grimoire so it rests cleanly in the bottom-left corner,
+   * fully visible regardless of window aspect ratio, never cut off by screen edges and
+   * never blocking the center crosshair or line of sight.
+   */
+  private updateBookPosition(bobX: number = 0, bobY: number = 0) {
+    if (!this.bookGroup) return;
+    const aspect = this.camera.aspect || 1.6;
+    const zDist = 0.44;
+    const halfH = zDist * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const halfW = halfH * aspect;
+
+    // Anchor securely in bottom-left viewport
+    // Book width is 0.52 * 0.70 = 0.364 (half-width = 0.182)
+    // Left edge (targetX - 0.182) stays cleanly inside -halfW with safe margin
+    // Right edge (targetX + 0.182) stays well clear of crosshair (x <= -0.06)
+    const targetX = Math.max(-halfW + 0.20, Math.min(-0.18, -halfW * 0.52));
+    const targetY = -halfH + 0.125;
+
+    this.bookGroup.position.set(targetX + bobX, targetY + bobY, -zDist);
+    this.bookGroup.rotation.set(0.86, 0.15, -0.02 + bobX * 0.06);
   }
 
   private spawnDestructiblesAt(barrelLocations: THREE.Vector3[], crystalLocations: THREE.Vector3[]) {
@@ -1162,19 +1168,6 @@ export class FireballEngine {
     // Check mana
     const actualManaCost = spell.manaCost;
     if (this.mana < actualManaCost) {
-      // Out of mana warning sound/text
-      if (this.onFloatingText) {
-        this.onFloatingText({
-          id: `mana_low_${now}`,
-          text: 'LOW MANA!',
-          x: window.innerWidth / 2,
-          y: window.innerHeight / 2 - 60,
-          color: '#38bdf8',
-          size: 20,
-          opacity: 1,
-          createdAt: now,
-        });
-      }
       return;
     }
 
@@ -1621,9 +1614,11 @@ export class FireballEngine {
   private destroyDestructible(d: DestructibleObject, index: number) {
     this.destructibles.splice(index, 1);
     this.scene.remove(d.mesh);
-    sounds.playShatter();
 
     if (d.type === 'barrel') {
+      // Heavy visceral barrel explosion (no alarm/siren sound)
+      sounds.playBarrelExplosion();
+
       // MEGA EXPLOSION! Chain detonation
       this.triggerExplosion(d.position, 'meteor_strike', 260, 11.0, 2.4);
 
@@ -1643,6 +1638,9 @@ export class FireballEngine {
         }
       }
     } else if (d.type === 'crystal') {
+      // Magical crystal chime
+      sounds.playCrystalPickup();
+
       // Mana burst & Pyromania powerup
       this.mana = this.maxMana;
       this.pyromaniaTimer = 10.0; // 10s of 2x damage
@@ -2036,7 +2034,14 @@ export class FireballEngine {
       this.screenShakeIntensity = Math.max(0, this.screenShakeIntensity - delta * 1.5);
     }
 
-    // 4. Staff Gem Idle Hover / Charge Pulse
+    // 4. Staff Orb & Golden Rings Levitation, Spinning & Charging
+    if (this.orbLevitationGroup) {
+      // Smooth subtle floating levitation in mid-air above the handle
+      const hoverY = 0.36 + Math.sin(performance.now() * 0.003) * 0.012;
+      const chargeVibe = this.isCharging ? (Math.random() - 0.5) * 0.004 * this.chargeProgress : 0;
+      this.orbLevitationGroup.position.y = hoverY + chargeVibe;
+    }
+
     if (this.staffGem) {
       const t = performance.now() * 0.004;
       this.staffGem.rotation.y = t * 2;
@@ -2061,14 +2066,28 @@ export class FireballEngine {
       }
     }
 
-    // Grimoire Book in Left Hand Idle Sway & Movement Bob
+    // Golden Rings spinning and rotating around the ball
+    if (this.staffGoldRingGroup) {
+      const spinMult = this.isCharging ? (2.8 + this.chargeProgress * 4.5) : 1.0;
+      if (this.staffOuterRing) {
+        this.staffOuterRing.rotation.x += delta * 1.6 * spinMult;
+        this.staffOuterRing.rotation.y += delta * 2.4 * spinMult;
+        this.staffOuterRing.rotation.z += delta * 0.8 * spinMult;
+      }
+      if (this.staffInnerRing) {
+        this.staffInnerRing.rotation.x -= delta * 2.1 * spinMult;
+        this.staffInnerRing.rotation.y += delta * 3.0 * spinMult;
+        this.staffInnerRing.rotation.z -= delta * 1.3 * spinMult;
+      }
+    }
+
+    // Grimoire Book in Left Hand Idle Sway & Movement Bob (anchored in bottom-left corner, fully visible)
     if (this.bookGroup && !this.isThirdPerson) {
       const swayTime = performance.now() * 0.0025;
       const isMoving = moveVector.lengthSq() > 0;
-      const bobY = isMoving ? Math.sin(performance.now() * 0.012) * 0.015 : Math.sin(swayTime) * 0.005;
-      const bobX = isMoving ? Math.cos(performance.now() * 0.006) * 0.01 : Math.cos(swayTime * 0.7) * 0.003;
-      this.bookGroup.position.set(-0.36 + bobX, -0.28 + bobY, -0.62);
-      this.bookGroup.rotation.z = -0.16 + bobX * 0.3;
+      const bobY = isMoving ? Math.sin(performance.now() * 0.012) * 0.0025 : Math.sin(swayTime) * 0.001;
+      const bobX = isMoving ? Math.cos(performance.now() * 0.006) * 0.0015 : Math.cos(swayTime * 0.7) * 0.0006;
+      this.updateBookPosition(bobX, bobY);
     }
 
     // 5. Portal Proximity Check & Prompt
@@ -2133,13 +2152,13 @@ export class FireballEngine {
     const sprite = new THREE.Sprite(this.particleMat);
     const offset = new THREE.Vector3(
       (Math.random() - 0.5) * 0.6,
-      (Math.random() - 0.5) * 0.6 + 0.4,
+      (Math.random() - 0.5) * 0.6 + 0.36,
       (Math.random() - 0.5) * 0.6
     );
     sprite.position.copy(offset);
     this.staffGroup.add(sprite);
 
-    // Moves inward to gem (0, 0.4, 0)
+    // Moves inward to levitating gem (0, 0.36, 0)
     setTimeout(() => {
       this.staffGroup?.remove(sprite);
     }, 120);
@@ -2422,7 +2441,7 @@ export class FireballEngine {
     this.playerRotation.yaw = 0;
     this.playerRotation.pitch = 0;
 
-    this.loadDungeonFloor(1);
+    this.loadHub(1);
   }
 
   private updateParticles(delta: number) {
@@ -2576,164 +2595,116 @@ export class FireballEngine {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    this.updateBookPosition(0, 0);
   }
 
   private updateGrimoireRadar(delta: number) {
     if (!this.radarCtx || !this.radarTexture) return;
     const ctx = this.radarCtx;
-    const w = 512;
-    const h = 512;
+    const w = 1024;
+    const h = 640;
 
-    this.radarSweepAngle = (this.radarSweepAngle + delta * 2.8) % (Math.PI * 2);
+    // Enhanced text sharpness settings on 2D context
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
-    // 1. Grimoire Parchment / Arcane Night Canvas Background
-    ctx.fillStyle = '#080d1a';
+    // High-legibility, high-contrast font definitions with bold optical weights
+    const FONT_TITLE = '900 27px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    const FONT_SUB = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    const FONT_SECTION = '900 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    const FONT_VALUE = '900 20px "Courier New", Courier, monospace';
+    const FONT_NAME = '900 17.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    const FONT_BADGE = '900 17px "Courier New", Courier, monospace';
+    const FONT_DESC = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+
+    // 1. Dark Brown Outer Leather Book Border (8px edge frame, strictly dark brown, not black)
+    ctx.fillStyle = '#3e2014';
     ctx.fillRect(0, 0, w, h);
 
-    // Subtle center gutter shadow between pages
-    const gutterGrad = ctx.createLinearGradient(w / 2 - 24, 0, w / 2 + 24, 0);
-    gutterGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    gutterGrad.addColorStop(0.5, 'rgba(0,0,0,0.65)');
-    gutterGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gutterGrad;
-    ctx.fillRect(w / 2 - 24, 0, 48, h);
+    // Pale Yellow Base Color for the entire UI inside the book
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(8, 8, w - 16, h - 16);
 
-    // Gold gilded border framing the ancient manuscript
-    ctx.strokeStyle = '#d4af37';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(10, 10, w - 20, h - 20);
-    ctx.strokeStyle = '#78541a';
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(16, 16, w - 32, h - 32);
+    // Book center crease divider in crisp dark brown
+    ctx.fillStyle = 'rgba(62, 32, 20, 0.12)';
+    ctx.fillRect(w / 2 - 12, 8, 24, h - 16);
+    ctx.strokeStyle = '#3e2014';
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, 8);
+    ctx.lineTo(w / 2, h - 8);
+    ctx.stroke();
 
-    // Ornate runic corners
-    const drawCorner = (x: number, y: number, sx: number, sy: number) => {
-      ctx.beginPath();
-      ctx.moveTo(x + sx * 26, y);
-      ctx.lineTo(x, y);
-      ctx.lineTo(x, y + sy * 26);
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    };
-    drawCorner(14, 14, 1, 1);
-    drawCorner(w - 14, 14, -1, 1);
-    drawCorner(14, h - 14, 1, -1);
-    drawCorner(w - 14, h - 14, -1, -1);
+    // Hand-drawn double manuscript border rules in crisp dark brown ink
+    ctx.strokeStyle = '#3e2014';
+    ctx.lineWidth = 2.0;
+    ctx.strokeRect(26, 22, w / 2 - 48, h - 44); // Left page outer margin
+    ctx.strokeRect(w / 2 + 22, 22, w / 2 - 48, h - 44); // Right page outer margin
 
-    // 2. Grimoire Header
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 20px "Cinzel", Georgia, serif';
-    ctx.textAlign = 'center';
-    if (this.currentLevelType === 'hub') {
-      ctx.fillText('SANCTUARY OF EMBERS', w / 2, 44);
-      ctx.fillStyle = '#34d399';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText('SUN TEMPLE • SAFE HAVEN (FULL MANA REGEN)', w / 2, 66);
-    } else {
-      ctx.fillText(`FLOOR ${this.currentFloor}: ${this.currentThemeName.toUpperCase()}`, w / 2, 44);
-      ctx.fillStyle = this.enemiesRemainingInWave > 0 ? '#f87171' : '#34d399';
-      ctx.font = 'bold 14px monospace';
-      const statusText = this.enemiesRemainingInWave > 0
-        ? `HOSTILES: ${this.enemiesRemainingInWave} / ${this.totalEnemiesInFloor}`
-        : 'FLOOR CLEARED • DESCENT OPEN';
-      ctx.fillText(statusText, w / 2, 66);
-    }
+    ctx.strokeStyle = 'rgba(62, 32, 20, 0.25)';
+    ctx.lineWidth = 1.0;
+    ctx.strokeRect(30, 26, w / 2 - 56, h - 52); // Left page inner rule
+    ctx.strokeRect(w / 2 + 26, 26, w / 2 - 56, h - 52); // Right page inner rule
 
-    // 3. Central Magical Radar Circle
-    const cx = 256;
-    const cy = 286;
-    const radarRadius = 182;
+    // ==========================================
+    // 2. LEFT PAGE: HAND-DRAWN RADAR MAP
+    // ==========================================
+    const cx = 256; // Center of left page (0 to 512)
+    const cy = 295; // Center vertically for radar circle
+    const radarRadius = 140;
     const maxRange = 44; // 3D units
 
-    // Circular dark starry background
-    const bgRad = ctx.createRadialGradient(cx, cy, 10, cx, cy, radarRadius);
-    bgRad.addColorStop(0, '#101e38');
-    bgRad.addColorStop(0.7, '#090e1a');
-    bgRad.addColorStop(1, '#04060d');
-    ctx.fillStyle = bgRad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radarRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Range rings
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([4, 4]);
-    [60, 120].forEach(r => {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
-    });
-
-    // Outer Gilded Compass Rim
-    ctx.setLineDash([]);
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radarRadius, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Crosshairs
-    ctx.strokeStyle = 'rgba(245, 158, 11, 0.25)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 5]);
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - radarRadius);
-    ctx.lineTo(cx, cy + radarRadius);
-    ctx.moveTo(cx - radarRadius, cy);
-    ctx.lineTo(cx + radarRadius, cy);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Rotating Radar Sonar Sweep
-    const sweepStart = this.radarSweepAngle;
-    const sweepEnd = this.radarSweepAngle + 0.55;
-    const sweepGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radarRadius);
-    sweepGrad.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
-    sweepGrad.addColorStop(1, 'rgba(56, 189, 248, 0.05)');
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, radarRadius, sweepStart, sweepEnd);
-    ctx.closePath();
-    ctx.fillStyle = sweepGrad;
-    ctx.fill();
-
-    // Leading sweep beam line
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(sweepEnd) * radarRadius, cy + Math.sin(sweepEnd) * radarRadius);
-    ctx.stroke();
-    ctx.restore();
-
-    // Cardinal North Marker (aligned with world North)
-    const northAngle = this.playerRotation.yaw - Math.PI / 2;
-    const nx = cx + Math.cos(northAngle) * (radarRadius - 12);
-    const ny = cy + Math.sin(northAngle) * (radarRadius - 12);
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 13px sans-serif';
+    // Heading on left page in deep dark brown ink
+    ctx.fillStyle = '#100400';
+    ctx.font = FONT_TITLE;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('N', nx, ny);
+    const floorHeader = this.currentFloor === 0 ? 'SANCTUARY (FLOOR 0)' : `FLOOR ${this.currentFloor}`;
+    ctx.fillText(floorHeader, cx, 58);
 
-    // Player Chevron at center pointing UP
-    ctx.fillStyle = '#38bdf8';
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
+    ctx.font = FONT_SUB;
+    ctx.fillStyle = '#2c1206';
+    const subTheme = this.currentFloor === 0 ? 'Sanctuary of Embers' : this.currentThemeName;
+    ctx.fillText(subTheme, cx, 80);
+
+    // Decorative divider under title in dark brown
+    ctx.strokeStyle = 'rgba(62, 32, 20, 0.45)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(cx - 105, 92);
+    ctx.lineTo(cx + 105, 92);
+    ctx.stroke();
+
+    // Radar Map Base: Pale Yellow disk fill
+    ctx.fillStyle = '#fef9c3';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radarRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Subtle inner range ring
+    ctx.strokeStyle = 'rgba(62, 32, 20, 0.20)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radarRadius * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // The Radar Circle: ONLY a circle in dark brown ink, no spinning radar
+    ctx.strokeStyle = '#261106'; // Dark brown
+    ctx.lineWidth = 4.0;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radarRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Player position at center of radar in dark brown ink
+    ctx.fillStyle = '#261106';
     ctx.beginPath();
     ctx.moveTo(cx, cy - 12);
-    ctx.lineTo(cx - 8, cy + 8);
-    ctx.lineTo(cx, cy + 4);
-    ctx.lineTo(cx + 8, cy + 8);
+    ctx.lineTo(cx - 9, cy + 10);
+    ctx.lineTo(cx, cy + 5);
+    ctx.lineTo(cx + 9, cy + 10);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
 
-    // Transformation for entities relative to player yaw
+    // Entity projection math relative to player camera yaw
     const cosYaw = Math.cos(this.playerRotation.yaw);
     const sinYaw = Math.sin(this.playerRotation.yaw);
 
@@ -2750,125 +2721,268 @@ export class FireballEngine {
         x: cx + Math.cos(angle) * normDist,
         y: cy + Math.sin(angle) * normDist,
         dist,
-        isBehind: relForward < 0,
       };
     };
 
-    let enemiesBehindCount = 0;
-
-    // 1. Portals
+    // Portals drawn as subtle dark brown ink rings
     for (const portal of this.portals) {
       const p = projectToRadar(portal.position.x, portal.position.z);
-      ctx.strokeStyle = '#f59e0b';
-      ctx.fillStyle = portal.active ? '#fbbf24' : '#78541a';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#261106';
+      ctx.lineWidth = 2.8;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 8.0, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#fbbf24';
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(portal.type === 'sanctuary' ? 'SANCTUARY' : 'PORTAL', p.x, p.y - 12);
     }
 
-    // 2. Mana Crystals & Explosive Barrels
+    // Mana crystals drawn as dark indigo ink diamonds
     for (const d of this.destructibles) {
       if (d.type === 'crystal') {
         const p = projectToRadar(d.position.x, d.position.z);
-        ctx.fillStyle = '#38bdf8';
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 1.5;
+        ctx.fillStyle = '#0a4a75';
         ctx.beginPath();
-        ctx.moveTo(p.x, p.y - 6);
-        ctx.lineTo(p.x + 5, p.y);
-        ctx.lineTo(p.x, p.y + 6);
-        ctx.lineTo(p.x - 5, p.y);
+        ctx.moveTo(p.x, p.y - 7);
+        ctx.lineTo(p.x + 6, p.y);
+        ctx.lineTo(p.x, p.y + 7);
+        ctx.lineTo(p.x - 6, p.y);
         ctx.closePath();
         ctx.fill();
-        ctx.stroke();
-      } else if (d.type === 'barrel') {
-        const p = projectToRadar(d.position.x, d.position.z);
-        ctx.fillStyle = '#f97316';
-        ctx.strokeStyle = '#c2410c';
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(p.x - 4, p.y - 4, 8, 8);
-        ctx.strokeRect(p.x - 4, p.y - 4, 8, 8);
       }
     }
 
-    // 3. Fountains
-    for (const f of this.fountains) {
-      const p = projectToRadar(f.position.x, f.position.z);
-      ctx.fillStyle = '#10b981';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(p.x - 4, p.y - 1.5, 8, 3);
-      ctx.fillRect(p.x - 1.5, p.y - 4, 3, 8);
+    // TNTs (explosive barrels) in DARK BLUE
+    ctx.fillStyle = '#0a2e7a'; // Deep dark blue
+    for (const d of this.destructibles) {
+      if (d.type === 'barrel') {
+        const p = projectToRadar(d.position.x, d.position.z);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
-    // 4. Training Dummies
-    for (const td of this.trainingDummies) {
-      const p = projectToRadar(td.position.x, td.position.z);
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = '#10b981';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 5. Enemies (Hostiles) - Pulsing Threat Dot & Warning
-    const pulse = 1 + Math.sin(performance.now() * 0.01) * 0.2;
+    // Enemies in DARK RED
+    ctx.fillStyle = '#b30000'; // Deep dark red
     for (const e of this.enemies) {
       const p = projectToRadar(e.group.position.x, e.group.position.z);
-      if (p.isBehind) enemiesBehindCount++;
-
-      // Pulse warning ring if hostile is behind
-      if (p.isBehind) {
-        ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 8 * pulse, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Red core dot
-      ctx.fillStyle = p.isBehind ? '#ef4444' : '#f87171';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.isBehind ? 5.5 : 4.5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 8.0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
     }
 
-    // NOTE: Pillars are intentionally NOT included per user request!
+    // Legend on left page in bold high-contrast dark brown ink
+    ctx.font = FONT_BADGE;
+    ctx.textAlign = 'center';
+    // Dark red enemy legend
+    ctx.fillStyle = '#b30000';
+    ctx.beginPath();
+    ctx.arc(cx - 80, 475, 7.0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#100400';
+    ctx.fillText('Hostile', cx - 35, 481);
 
-    // Bottom Alert Banner if hostiles are behind
-    if (enemiesBehindCount > 0) {
-      const flash = Math.sin(performance.now() * 0.012) > 0;
-      ctx.fillStyle = flash ? 'rgba(220, 38, 38, 0.95)' : 'rgba(153, 27, 27, 0.9)';
-      ctx.beginPath();
-      ctx.roundRect(cx - 110, h - 35, 220, 24, 6);
-      ctx.fill();
-      ctx.strokeStyle = '#fef08a';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+    // Dark blue TNT legend
+    ctx.fillStyle = '#0a2e7a';
+    ctx.beginPath();
+    ctx.arc(cx + 35, 475, 7.0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#100400';
+    ctx.fillText('TNT', cx + 70, 481);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 12px monospace';
+    // Dungeon status note on left page in bold dark brown
+    ctx.font = FONT_SUB;
+    ctx.fillStyle = '#2c1206';
+    if (this.currentLevelType === 'hub') {
+      ctx.fillText('Safe Haven • Full Recovery', cx, 515);
+    } else {
+      const statusStr = this.enemiesRemainingInWave > 0
+        ? `Hostiles: ${this.enemiesRemainingInWave} / ${this.totalEnemiesInFloor}`
+        : 'Floor Cleared • Descent Open';
+      ctx.fillText(statusStr, cx, 515);
+    }
+
+    // ==========================================
+    // 3. RIGHT PAGE: HEALTH, MANA & SPELLS UI
+    // ==========================================
+    const rx = 768; // Center of right page (512 to 1024)
+    const rightMarginLeft = 562;
+    const rightWidth = 412;
+
+    // Right Page Header in deepest dark brown ink
+    ctx.fillStyle = '#100400';
+    ctx.font = FONT_TITLE;
+    ctx.textAlign = 'center';
+    ctx.fillText('VITAL CODEX', rx, 58);
+
+    ctx.font = FONT_SUB;
+    ctx.fillStyle = '#2c1206';
+    ctx.fillText('Arcane Life & Incantations', rx, 80);
+
+    ctx.strokeStyle = 'rgba(62, 32, 20, 0.45)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(rx - 105, 92);
+    ctx.lineTo(rx + 105, 92);
+    ctx.stroke();
+
+    // --- HEALTH (VITALITY) UI ---
+    const hpRatio = Math.max(0, Math.min(1, this.hp / this.maxHp));
+    ctx.textAlign = 'left';
+    ctx.font = FONT_SECTION;
+    ctx.fillStyle = '#800000'; // Deep dark crimson red label
+    ctx.fillText('VITALITY', rightMarginLeft, 115);
+
+    ctx.textAlign = 'right';
+    ctx.font = FONT_VALUE;
+    ctx.fillStyle = '#100400';
+    ctx.fillText(`${Math.round(this.hp)} / ${this.maxHp}`, rightMarginLeft + rightWidth, 115);
+
+    // Health Bar Trough (Pale Yellow base, framed in solid dark brown)
+    ctx.fillStyle = '#fef9c3';
+    ctx.fillRect(rightMarginLeft, 122, rightWidth, 22);
+
+    // Health Bar Fill: DARK RED (#b30000)
+    if (hpRatio > 0) {
+      const hpGrad = ctx.createLinearGradient(rightMarginLeft, 0, rightMarginLeft + rightWidth, 0);
+      hpGrad.addColorStop(0, '#8a0000');
+      hpGrad.addColorStop(1, '#b30000');
+      ctx.fillStyle = hpGrad;
+      ctx.fillRect(rightMarginLeft + 1, 123, (rightWidth - 2) * hpRatio, 20);
+    }
+
+    // Health Bar Border in dark brown ink
+    ctx.strokeStyle = '#100400';
+    ctx.lineWidth = 2.2;
+    ctx.strokeRect(rightMarginLeft, 122, rightWidth, 22);
+
+    // --- MANA (PYRO ENERGY) UI ---
+    const manaRatio = Math.max(0, Math.min(1, this.mana / this.maxMana));
+    ctx.textAlign = 'left';
+    ctx.font = FONT_SECTION;
+    ctx.fillStyle = '#002a70'; // Deep dark navy blue label
+    ctx.fillText('PYRO ENERGY', rightMarginLeft, 166);
+
+    ctx.textAlign = 'right';
+    ctx.font = FONT_VALUE;
+    ctx.fillStyle = '#100400';
+    ctx.fillText(`${Math.round(this.mana)} / ${this.maxMana}`, rightMarginLeft + rightWidth, 166);
+
+    // Mana Bar Trough (Pale Yellow base, framed in solid dark brown)
+    ctx.fillStyle = '#fef9c3';
+    ctx.fillRect(rightMarginLeft, 173, rightWidth, 22);
+
+    // Mana Bar Fill: DARK BLUE (#0a2e7a)
+    if (manaRatio > 0) {
+      const manaGrad = ctx.createLinearGradient(rightMarginLeft, 0, rightMarginLeft + rightWidth, 0);
+      manaGrad.addColorStop(0, '#04163d');
+      manaGrad.addColorStop(1, '#0a2e7a');
+      ctx.fillStyle = manaGrad;
+      ctx.fillRect(rightMarginLeft + 1, 174, (rightWidth - 2) * manaRatio, 20);
+    }
+
+    // Mana Bar Border in dark brown ink
+    ctx.strokeStyle = '#100400';
+    ctx.lineWidth = 2.2;
+    ctx.strokeRect(rightMarginLeft, 173, rightWidth, 22);
+
+    // Mana Regeneration Note
+    ctx.textAlign = 'left';
+    ctx.font = FONT_DESC;
+    ctx.fillStyle = '#2c1206';
+    const regenText = this.currentLevelType === 'hub' ? 'Sanctuary: +35 MP/s' : 'Regen: +4.5 MP/s (Restore on hits)';
+    ctx.fillText(regenText, rightMarginLeft, 210);
+
+    // Divider before Spells in dark brown
+    ctx.strokeStyle = 'rgba(62, 32, 20, 0.45)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(rightMarginLeft, 222);
+    ctx.lineTo(rightMarginLeft + rightWidth, 222);
+    ctx.stroke();
+
+    // --- SPELLS ARSENAL UI ---
+    ctx.textAlign = 'center';
+    ctx.font = FONT_SECTION;
+    ctx.fillStyle = '#100400';
+    ctx.fillText('ARCANE SPELLS', rx, 240);
+
+    const spellKeys: SpellId[] = ['pyro_blast', 'inferno_orb', 'flame_triad', 'meteor_strike'];
+    const spellStartY = 250;
+    const spellCardHeight = 55;
+    const spellCardGap = 8;
+
+    spellKeys.forEach((sId, index) => {
+      const spell = SPELLS[sId];
+      const cardY = spellStartY + index * (spellCardHeight + spellCardGap);
+      const isActive = this.activeSpellId === sId;
+      const hasMana = this.mana >= spell.manaCost;
+
+      // Spell Card Background: Pale Yellow base
+      if (isActive) {
+        ctx.fillStyle = '#fde047'; // Vivid pale yellow highlight for active spell
+        ctx.fillRect(rightMarginLeft, cardY, rightWidth, spellCardHeight);
+      } else {
+        ctx.fillStyle = '#fef9c3'; // Clean pale yellow card base
+        ctx.fillRect(rightMarginLeft, cardY, rightWidth, spellCardHeight);
+      }
+
+      // Spell Card Border
+      ctx.strokeStyle = isActive ? '#100400' : 'rgba(38, 17, 6, 0.55)';
+      ctx.lineWidth = isActive ? 2.8 : 1.6;
+      ctx.strokeRect(rightMarginLeft, cardY, rightWidth, spellCardHeight);
+
+      // Hotkey badge [1], [2], [3], [4] in dark brown
+      ctx.fillStyle = '#100400';
+      ctx.font = FONT_BADGE;
+      ctx.textAlign = 'left';
+      ctx.fillText(`[${index + 1}]`, rightMarginLeft + 10, cardY + 23);
+
+      // Spell Name in extra bold dark brown
+      ctx.font = FONT_NAME;
+      ctx.fillStyle = hasMana ? '#100400' : '#6b4d3b';
+      ctx.fillText(spell.name, rightMarginLeft + 44, cardY + 23);
+
+      // Active Indicator on Right in dark red
+      if (isActive) {
+        ctx.font = FONT_BADGE;
+        ctx.fillStyle = '#9e0000'; // Dark red
+        ctx.textAlign = 'right';
+        ctx.fillText('✦ ACTIVE', rightMarginLeft + rightWidth - 10, cardY + 23);
+      }
+
+      // Spell Mana Cost Badge in DARK BLUE
+      ctx.textAlign = 'right';
+      ctx.font = FONT_BADGE;
+      ctx.fillStyle = '#002a70'; // Dark blue
+      ctx.fillText(`${spell.manaCost} MP`, rightMarginLeft + rightWidth - 10, cardY + 44);
+
+      // Short subtitle / description on bottom left
+      ctx.textAlign = 'left';
+      ctx.font = FONT_DESC;
+      ctx.fillStyle = '#3e2014';
+      let subDesc = 'Fiery Bolt';
+      if (sId === 'inferno_orb') subDesc = 'Solar Charge Sphere';
+      if (sId === 'flame_triad') subDesc = '3-Way Flaming Spread';
+      if (sId === 'meteor_strike') subDesc = 'Heavy Lobbed Impact';
+      ctx.fillText(subDesc, rightMarginLeft + 44, cardY + 44);
+    });
+
+    // Pyromania Powerup Banner if active
+    if (this.pyromaniaTimer > 0) {
+      ctx.fillStyle = 'rgba(179, 0, 0, 0.16)';
+      ctx.fillRect(rightMarginLeft, 504, rightWidth, 26);
+      ctx.strokeStyle = '#b30000';
+      ctx.lineWidth = 2.0;
+      ctx.strokeRect(rightMarginLeft, 504, rightWidth, 26);
+      ctx.fillStyle = '#b30000';
+      ctx.font = FONT_BADGE;
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`⚠️ ${enemiesBehindCount} HOSTILE${enemiesBehindCount > 1 ? 'S' : ''} BEHIND!`, cx, h - 23);
+      ctx.fillText(`⚡ PYROMANIA 2X (${this.pyromaniaTimer.toFixed(1)}s)`, rx, 521);
+    } else {
+      // Bottom Navigation Hint in dark brown ink
+      ctx.font = FONT_DESC;
+      ctx.fillStyle = '#2c1206';
+      ctx.textAlign = 'center';
+      ctx.fillText('Keys 1-4 or Scroll Wheel to select spells', rx, 521);
     }
 
     this.radarTexture.needsUpdate = true;

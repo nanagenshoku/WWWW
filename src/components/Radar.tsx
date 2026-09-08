@@ -74,7 +74,7 @@ export const Radar: React.FC<RadarProps> = ({ data, levelInfo }) => {
       <div className="flex items-center gap-1.5 bg-slate-950/85 backdrop-blur-md border border-slate-700/80 rounded-lg px-2.5 py-1 shadow-lg text-[11px] font-mono">
         {levelInfo.type === 'hub' ? (
           <span className="flex items-center gap-1 text-emerald-400 font-bold">
-            <Shield className="w-3.5 h-3.5" /> SANCTUARY (SAFE)
+            <Shield className="w-3.5 h-3.5" /> SANCTUARY (FLOOR 0)
           </span>
         ) : (
           <span className="flex items-center gap-1 text-amber-300 font-bold">
@@ -87,15 +87,6 @@ export const Radar: React.FC<RadarProps> = ({ data, levelInfo }) => {
       <div className="relative w-[140px] h-[140px] rounded-full bg-slate-950/90 backdrop-blur-md border-2 border-slate-700/70 shadow-2xl overflow-hidden">
         {/* Subtle grid background */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.06)_0,rgba(15,23,42,0.8)_85%)]" />
-
-        {/* Rotating Sonar Sweep Line */}
-        <div
-          className="absolute inset-0 pointer-events-none origin-center animate-[spin_4s_linear_infinite]"
-          style={{
-            background:
-              'conic-gradient(from 0deg, transparent 0deg, transparent 310deg, rgba(56, 189, 248, 0.22) 360deg)',
-          }}
-        />
 
         {/* SVG Drawing Layer */}
         <svg className="absolute inset-0 w-full h-full" viewBox="0 0 140 140">
@@ -172,7 +163,7 @@ export const Radar: React.FC<RadarProps> = ({ data, levelInfo }) => {
                     cx={blip.px}
                     cy={blip.py}
                     r={blip.isBehind ? '4' : '3.2'}
-                    fill={blip.isBehind ? '#ef4444' : '#f87171'}
+                    fill="#8b0000"
                     stroke="#ffffff"
                     strokeWidth="0.8"
                   />
@@ -209,8 +200,8 @@ export const Radar: React.FC<RadarProps> = ({ data, levelInfo }) => {
                   y={blip.py - 2.5}
                   width="5"
                   height="5"
-                  fill="#f97316"
-                  stroke="#c2410c"
+                  fill="#0f2a71"
+                  stroke="#1e3a8a"
                   strokeWidth="0.8"
                 />
               );
